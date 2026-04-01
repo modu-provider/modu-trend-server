@@ -1,0 +1,12 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+SQLAlchemy==2.0.39
+psycopg[binary]==3.2.6
+APScheduler==3.10.4
+httpx==0.28.1
+beautifulsoup4==4.13.3
+pydantic==2.11.2
+pydantic-settings==2.8.1
+openai>=2.26.0,<3.0.0
+passlib==1.7.4
+PyJWT==2.10.1
