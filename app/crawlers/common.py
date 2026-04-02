@@ -17,8 +17,9 @@ DEFAULT_HEADERS = {
 }
 
 
-def fetch_html(url: str, *, timeout_s: float = 30.0) -> str:
-    with httpx.Client(headers=DEFAULT_HEADERS, timeout=timeout_s, follow_redirects=True) as client:
+def fetch_html(url: str, *, timeout_s: float = 30.0, extra_headers: dict[str, str] | None = None) -> str:
+    headers = {**DEFAULT_HEADERS, **(extra_headers or {})}
+    with httpx.Client(headers=headers, timeout=timeout_s, follow_redirects=True) as client:
         r = client.get(url)
         r.raise_for_status()
         r.encoding = r.encoding or "utf-8"

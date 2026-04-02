@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
@@ -18,6 +19,17 @@ def _hash(source: str, age: int, title: str, category: str) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+@dataclass(frozen=True)
+class SavePostsResult:
+    inserted: int
+    """OpenAI 호출 예외(JSON/네트워크/API 키 등)."""
+    skipped_transform_error: int
+    """모더레이션 차단, 모델 skip:true, 빈 제목 등 변환 결과 없음."""
+    skipped_transform_none: int
+    """이미 같은 원문 해시(uq_posts)가 있음."""
+    skipped_duplicate: int
+
+
 def save_posts(
     db: Session,
     *,
@@ -25,16 +37,20 @@ def save_posts(
     age: int,
     source: str,
     items: list[CrawledItem],
-) -> int:
+) -> SavePostsResult:
     inserted = 0
+    skipped_transform_error = 0
+    skipped_transform_none = 0
+    skipped_duplicate = 0
     for it in items:
         # 원문은 저장하지 않고, OpenAI 변환 결과만 저장
         try:
             tr = transform_title_and_category(title=it.title, category=it.category or "")
         except Exception:
-            # OpenAI/JSON 파싱 문제 등으로 전체 스케줄러가 죽지 않게 스킵
+            skipped_transform_error += 1
             continue
         if tr is None:
+            skipped_transform_none += 1
             continue
 
         p = Post(
@@ -52,7 +68,13 @@ def save_posts(
             inserted += 1
         except IntegrityError:
             db.rollback()
-    return inserted
+            skipped_duplicate += 1
+    return SavePostsResult(
+        inserted=inserted,
+        skipped_transform_error=skipped_transform_error,
+        skipped_transform_none=skipped_transform_none,
+        skipped_duplicate=skipped_duplicate,
+    )
 
 
 def recompute_rankings(

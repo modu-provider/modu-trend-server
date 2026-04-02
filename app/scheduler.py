@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
 import random
 from datetime import datetime
+from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
+
+logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.crawlers.cook82 import crawl_82cook_hot
@@ -15,35 +19,87 @@ from app.models import AudienceGroup
 from app.services.ingest import recompute_rankings, save_posts
 
 
-def crawl_once() -> dict[str, int]:
-    results: dict[str, int] = {}
+def crawl_once() -> dict[str, Any]:
+    results: dict[str, Any] = {}
+    errors: list[str] = []
+
+    def _ingest(key: str, crawl_fn, *, group: AudienceGroup, age: int, source: str) -> None:
+        crawled_key = key.replace("_inserted", "_crawled")
+        try:
+            items = crawl_fn()
+            results[crawled_key] = len(items)
+            sp = save_posts(db, group=group, age=age, source=source, items=items)
+            results[key] = sp.inserted
+            save_key = key.replace("_inserted", "_save")
+            results[save_key] = {
+                "skipped_transform_error": sp.skipped_transform_error,
+                "skipped_transform_none": sp.skipped_transform_none,
+                "skipped_duplicate": sp.skipped_duplicate,
+            }
+        except Exception as e:
+            results[key] = 0
+            results[crawled_key] = None
+            msg = f"{key}: {e}"
+            errors.append(msg)
+            logger.warning("crawl_once %s", msg, exc_info=True)
+
+    def _recompute(label: str, **kw: Any) -> None:
+        try:
+            recompute_rankings(db, **kw)
+        except Exception as e:
+            errors.append(f"{label}: {e}")
+            logger.warning("crawl_once %s: %s", label, e, exc_info=True)
+
     with SessionLocal() as db:
         # 20~30대 여성: instiz + theqoo
-        results["instiz_female_inserted"] = save_posts(
-            db, group=AudienceGroup.female, age=20, source="instiz", items=crawl_instiz_hot()
+        _ingest(
+            "instiz_female_inserted",
+            crawl_instiz_hot,
+            group=AudienceGroup.female,
+            age=20,
+            source="instiz",
         )
-        results["theqoo_female_inserted"] = save_posts(
-            db, group=AudienceGroup.female, age=20, source="theqoo", items=crawl_theqoo_hot()
+        _ingest(
+            "theqoo_female_inserted",
+            crawl_theqoo_hot,
+            group=AudienceGroup.female,
+            age=20,
+            source="theqoo",
         )
-        results["82cook_female_inserted"] = save_posts(
-            db, group=AudienceGroup.female, age=20, source="82cook", items=crawl_82cook_hot()
+        _ingest(
+            "82cook_female_inserted",
+            crawl_82cook_hot,
+            group=AudienceGroup.female,
+            age=50,
+            source="82cook",
         )
 
         # 20~30대 남성: fmkorea
-        results["fmkorea_male_inserted"] = save_posts(
-            db, group=AudienceGroup.male, age=20, source="fmkorea", items=crawl_fmkorea_best2()
+        _ingest(
+            "fmkorea_male_inserted",
+            crawl_fmkorea_best2,
+            group=AudienceGroup.male,
+            age=20,
+            source="fmkorea",
         )
 
-        # rankings refresh
-        recompute_rankings(
-            db,
+        # rankings refresh (일부 소스 실패해도 가능한 만큼 갱신)
+        _recompute(
+            "rankings_female_20",
             group=AudienceGroup.female,
             age=20,
             window_minutes=settings.ranking_window_minutes,
             limit=settings.ranking_limit,
         )
-        recompute_rankings(
-            db,
+        _recompute(
+            "rankings_female_50",
+            group=AudienceGroup.female,
+            age=50,
+            window_minutes=settings.ranking_window_minutes,
+            limit=settings.ranking_limit,
+        )
+        _recompute(
+            "rankings_male_20",
             group=AudienceGroup.male,
             age=20,
             window_minutes=settings.ranking_window_minutes,
@@ -51,6 +107,8 @@ def crawl_once() -> dict[str, int]:
         )
 
     results["ran_at"] = int(datetime.utcnow().timestamp())
+    if errors:
+        results["errors"] = errors
     return results
 
 
