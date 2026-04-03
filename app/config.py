@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     crawl_interval_min_minutes: float = 10.0
     crawl_interval_max_minutes: float = 30.0
 
+    # 커뮤니티별 크롤 on/off (.env: CRAWL_ENABLE_INSTIZ=false 등)
+    crawl_enable_instiz: bool = True
+    crawl_enable_theqoo: bool = True
+    crawl_enable_82cook: bool = True
+    crawl_enable_fmkorea: bool = True
+    crawl_enable_dogdrip: bool = True
+
     # 랭킹 집계 윈도우(분, 소수 가능). 환경변수 RANKING_WINDOW_HOURS만 있으면 분으로 환산(×60).
     ranking_window_minutes: float = 1440.0
     ranking_limit: int = 10
