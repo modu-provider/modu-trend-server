@@ -11,12 +11,13 @@ logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.crawlers.cook82 import crawl_82cook_hot
+from app.crawlers.dogdrip import crawl_dogdrip_hot
 from app.crawlers.fmkorea import crawl_fmkorea_best2
 from app.crawlers.instiz import crawl_instiz_hot
 from app.crawlers.theqoo import crawl_theqoo_hot
 from app.db import SessionLocal
 from app.models import AudienceGroup
-from app.services.ingest import recompute_rankings, save_posts
+from app.services.ingest import recompute_rankings, save_posts, save_posts_multi_age
 
 
 def crawl_once() -> dict[str, Any]:
@@ -59,13 +60,40 @@ def crawl_once() -> dict[str, Any]:
             age=20,
             source="instiz",
         )
-        _ingest(
-            "theqoo_female_inserted",
-            crawl_theqoo_hot,
-            group=AudienceGroup.female,
-            age=20,
-            source="theqoo",
-        )
+        try:
+            theqoo_items = crawl_theqoo_hot()
+            n_theqoo = len(theqoo_items)
+            results["theqoo_female_crawled"] = n_theqoo
+            results["theqoo_female_30_crawled"] = n_theqoo
+            tq_by_age = save_posts_multi_age(
+                db,
+                group=AudienceGroup.female,
+                source="theqoo",
+                items=theqoo_items,
+                ages=(20, 30),
+            )
+            sp_tq20 = tq_by_age[20]
+            sp_tq30 = tq_by_age[30]
+            results["theqoo_female_inserted"] = sp_tq20.inserted
+            results["theqoo_female_save"] = {
+                "skipped_transform_error": sp_tq20.skipped_transform_error,
+                "skipped_transform_none": sp_tq20.skipped_transform_none,
+                "skipped_duplicate": sp_tq20.skipped_duplicate,
+            }
+            results["theqoo_female_30_inserted"] = sp_tq30.inserted
+            results["theqoo_female_30_save"] = {
+                "skipped_transform_error": sp_tq30.skipped_transform_error,
+                "skipped_transform_none": sp_tq30.skipped_transform_none,
+                "skipped_duplicate": sp_tq30.skipped_duplicate,
+            }
+        except Exception as e:
+            results["theqoo_female_inserted"] = 0
+            results["theqoo_female_30_inserted"] = 0
+            results["theqoo_female_crawled"] = None
+            results["theqoo_female_30_crawled"] = None
+            msg = f"theqoo_female: {e}"
+            errors.append(msg)
+            logger.warning("crawl_once %s", msg, exc_info=True)
         _ingest(
             "82cook_female_inserted",
             crawl_82cook_hot,
@@ -74,13 +102,49 @@ def crawl_once() -> dict[str, Any]:
             source="82cook",
         )
 
-        # 20~30대 남성: fmkorea
+        # 에펨코리아 베스트: 크롤·LLM 1회, 20·30대 남성 각각 저장
+        try:
+            fm_items = crawl_fmkorea_best2()
+            n_fm = len(fm_items)
+            results["fmkorea_male_crawled"] = n_fm
+            results["fmkorea_male_30_crawled"] = n_fm
+            fm_by_age = save_posts_multi_age(
+                db,
+                group=AudienceGroup.male,
+                source="fmkorea",
+                items=fm_items,
+                ages=(20, 30),
+            )
+            sp_fm20 = fm_by_age[20]
+            sp_fm30 = fm_by_age[30]
+            results["fmkorea_male_inserted"] = sp_fm20.inserted
+            results["fmkorea_male_save"] = {
+                "skipped_transform_error": sp_fm20.skipped_transform_error,
+                "skipped_transform_none": sp_fm20.skipped_transform_none,
+                "skipped_duplicate": sp_fm20.skipped_duplicate,
+            }
+            results["fmkorea_male_30_inserted"] = sp_fm30.inserted
+            results["fmkorea_male_30_save"] = {
+                "skipped_transform_error": sp_fm30.skipped_transform_error,
+                "skipped_transform_none": sp_fm30.skipped_transform_none,
+                "skipped_duplicate": sp_fm30.skipped_duplicate,
+            }
+        except Exception as e:
+            results["fmkorea_male_inserted"] = 0
+            results["fmkorea_male_30_inserted"] = 0
+            results["fmkorea_male_crawled"] = None
+            results["fmkorea_male_30_crawled"] = None
+            msg = f"fmkorea_male: {e}"
+            errors.append(msg)
+            logger.warning("crawl_once %s", msg, exc_info=True)
+
+        # 30대 남성 커뮤니티: 개드립 인기글
         _ingest(
-            "fmkorea_male_inserted",
-            crawl_fmkorea_best2,
+            "dogdrip_male_inserted",
+            crawl_dogdrip_hot,
             group=AudienceGroup.male,
-            age=20,
-            source="fmkorea",
+            age=30,
+            source="dogdrip",
         )
 
         # rankings refresh (일부 소스 실패해도 가능한 만큼 갱신)
@@ -88,6 +152,13 @@ def crawl_once() -> dict[str, Any]:
             "rankings_female_20",
             group=AudienceGroup.female,
             age=20,
+            window_minutes=settings.ranking_window_minutes,
+            limit=settings.ranking_limit,
+        )
+        _recompute(
+            "rankings_female_30",
+            group=AudienceGroup.female,
+            age=30,
             window_minutes=settings.ranking_window_minutes,
             limit=settings.ranking_limit,
         )
@@ -102,6 +173,13 @@ def crawl_once() -> dict[str, Any]:
             "rankings_male_20",
             group=AudienceGroup.male,
             age=20,
+            window_minutes=settings.ranking_window_minutes,
+            limit=settings.ranking_limit,
+        )
+        _recompute(
+            "rankings_male_30",
+            group=AudienceGroup.male,
+            age=30,
             window_minutes=settings.ranking_window_minutes,
             limit=settings.ranking_limit,
         )

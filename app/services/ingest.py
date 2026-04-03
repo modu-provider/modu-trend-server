@@ -77,6 +77,57 @@ def save_posts(
     )
 
 
+def save_posts_multi_age(
+    db: Session,
+    *,
+    group: AudienceGroup,
+    source: str,
+    items: list[CrawledItem],
+    ages: tuple[int, ...],
+) -> dict[int, SavePostsResult]:
+    """글마다 `transform_title_and_category`는 한 번만 호출하고, 각 age로 Post를 따로 저장."""
+    per: dict[int, dict[str, int]] = {a: {"ins": 0, "te": 0, "tn": 0, "dup": 0} for a in ages}
+    for it in items:
+        try:
+            tr = transform_title_and_category(title=it.title, category=it.category or "")
+        except Exception:
+            for a in ages:
+                per[a]["te"] += 1
+            continue
+        if tr is None:
+            for a in ages:
+                per[a]["tn"] += 1
+            continue
+
+        for a in ages:
+            p = Post(
+                group=group,
+                age=a,
+                source=source,
+                title=tr.title[:512],
+                category=tr.category[:128],
+                keywords=",".join(tr.keywords)[:512],
+                content_hash=_hash(source, a, it.title, it.category or ""),
+            )
+            db.add(p)
+            try:
+                db.commit()
+                per[a]["ins"] += 1
+            except IntegrityError:
+                db.rollback()
+                per[a]["dup"] += 1
+
+    return {
+        a: SavePostsResult(
+            inserted=per[a]["ins"],
+            skipped_transform_error=per[a]["te"],
+            skipped_transform_none=per[a]["tn"],
+            skipped_duplicate=per[a]["dup"],
+        )
+        for a in ages
+    }
+
+
 def recompute_rankings(
     db: Session,
     *,
