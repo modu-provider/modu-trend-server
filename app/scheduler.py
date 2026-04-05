@@ -45,6 +45,17 @@ def crawl_once() -> dict[str, Any]:
                 "skipped_transform_none": sp.skipped_transform_none,
                 "skipped_duplicate": sp.skipped_duplicate,
             }
+            logger.info(
+                "crawl %s group=%s age=%s crawled=%s inserted=%s skipped={err:%s none:%s dup:%s}",
+                source,
+                group.name,
+                age,
+                results[crawled_key],
+                sp.inserted,
+                sp.skipped_transform_error,
+                sp.skipped_transform_none,
+                sp.skipped_duplicate,
+            )
         except Exception as e:
             results[key] = 0
             results[crawled_key] = None
@@ -104,6 +115,13 @@ def crawl_once() -> dict[str, Any]:
                     "skipped_transform_none": sp_tq30.skipped_transform_none,
                     "skipped_duplicate": sp_tq30.skipped_duplicate,
                 }
+                logger.info(
+                    "crawl theqoo group=%s ages=[20,30] crawled=%s inserted_20=%s inserted_30=%s",
+                    AudienceGroup.female.name,
+                    n_theqoo,
+                    sp_tq20.inserted,
+                    sp_tq30.inserted,
+                )
             except Exception as e:
                 results["theqoo_female_inserted"] = 0
                 results["theqoo_female_30_inserted"] = 0
@@ -163,6 +181,13 @@ def crawl_once() -> dict[str, Any]:
                     "skipped_transform_none": sp_fm30.skipped_transform_none,
                     "skipped_duplicate": sp_fm30.skipped_duplicate,
                 }
+                logger.info(
+                    "crawl fmkorea group=%s ages=[20,30] crawled=%s inserted_20=%s inserted_30=%s",
+                    AudienceGroup.male.name,
+                    n_fm,
+                    sp_fm20.inserted,
+                    sp_fm30.inserted,
+                )
             except Exception as e:
                 results["fmkorea_male_inserted"] = 0
                 results["fmkorea_male_30_inserted"] = 0
@@ -208,6 +233,13 @@ def crawl_once() -> dict[str, Any]:
                     "skipped_transform_none": sp_rw40.skipped_transform_none,
                     "skipped_duplicate": sp_rw40.skipped_duplicate,
                 }
+                logger.info(
+                    "crawl ruliweb group=%s ages=[30,40] crawled=%s inserted_30=%s inserted_40=%s",
+                    AudienceGroup.male.name,
+                    n_rw,
+                    sp_rw30.inserted,
+                    sp_rw40.inserted,
+                )
             except Exception as e:
                 results["ruliweb_male_inserted"] = 0
                 results["ruliweb_male_40_inserted"] = 0
@@ -254,6 +286,13 @@ def crawl_once() -> dict[str, Any]:
                     "skipped_transform_none": sp_ilbe50.skipped_transform_none,
                     "skipped_duplicate": sp_ilbe50.skipped_duplicate,
                 }
+                logger.info(
+                    "crawl ilbe group=%s ages=[40,50] crawled=%s inserted_40=%s inserted_50=%s",
+                    AudienceGroup.male.name,
+                    n_ilbe,
+                    sp_ilbe40.inserted,
+                    sp_ilbe50.inserted,
+                )
             except Exception as e:
                 results["ilbe_male_40_inserted"] = 0
                 results["ilbe_male_50_inserted"] = 0
