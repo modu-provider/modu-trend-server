@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     crawl_enable_82cook: bool = True
     crawl_enable_fmkorea: bool = True
     crawl_enable_dogdrip: bool = True
+    crawl_enable_ruliweb: bool = True
+    crawl_enable_ilbe: bool = True
 
     # 랭킹 집계 윈도우(분, 소수 가능). 환경변수 RANKING_WINDOW_HOURS만 있으면 분으로 환산(×60).
     ranking_window_minutes: float = 1440.0

@@ -15,6 +15,8 @@ from app.crawlers.dogdrip import crawl_dogdrip_hot
 from app.crawlers.fmkorea import crawl_fmkorea_best2
 from app.crawlers.instiz import crawl_instiz_hot
 from app.crawlers.theqoo import crawl_theqoo_hot
+from crawl_ruliweb_best import crawl_ruliweb_best
+from crawl_ilbe_best import crawl_ilbe_titles
 from app.db import SessionLocal
 from app.models import AudienceGroup
 from app.services.ingest import recompute_rankings, save_posts, save_posts_multi_age
@@ -177,6 +179,97 @@ def crawl_once() -> dict[str, Any]:
             results["fmkorea_male_30_crawled"] = 0
             results["fmkorea_male_save"] = dict(_EMPTY_SAVE)
             results["fmkorea_male_30_save"] = dict(_EMPTY_SAVE)
+
+        # Ruliweb Best: 30·40대 남성
+        if settings.crawl_enable_ruliweb:
+            try:
+                rw_items = crawl_ruliweb_best()
+                n_rw = len(rw_items)
+                results["ruliweb_male_crawled"] = n_rw
+                results["ruliweb_male_40_crawled"] = n_rw
+                rw_by_age = save_posts_multi_age(
+                    db,
+                    group=AudienceGroup.male,
+                    source="ruliweb",
+                    items=rw_items,
+                    ages=(30, 40),
+                )
+                sp_rw30 = rw_by_age[30]
+                sp_rw40 = rw_by_age[40]
+                results["ruliweb_male_inserted"] = sp_rw30.inserted
+                results["ruliweb_male_save"] = {
+                    "skipped_transform_error": sp_rw30.skipped_transform_error,
+                    "skipped_transform_none": sp_rw30.skipped_transform_none,
+                    "skipped_duplicate": sp_rw30.skipped_duplicate,
+                }
+                results["ruliweb_male_40_inserted"] = sp_rw40.inserted
+                results["ruliweb_male_40_save"] = {
+                    "skipped_transform_error": sp_rw40.skipped_transform_error,
+                    "skipped_transform_none": sp_rw40.skipped_transform_none,
+                    "skipped_duplicate": sp_rw40.skipped_duplicate,
+                }
+            except Exception as e:
+                results["ruliweb_male_inserted"] = 0
+                results["ruliweb_male_40_inserted"] = 0
+                results["ruliweb_male_crawled"] = None
+                results["ruliweb_male_40_crawled"] = None
+                msg = f"ruliweb_male: {e}"
+                errors.append(msg)
+                logger.warning("crawl_once %s", msg, exc_info=True)
+        else:
+            disabled_sources.append("ruliweb")
+            results["ruliweb_male_inserted"] = 0
+            results["ruliweb_male_40_inserted"] = 0
+            results["ruliweb_male_crawled"] = 0
+            results["ruliweb_male_40_crawled"] = 0
+            results["ruliweb_male_save"] = dict(_EMPTY_SAVE)
+            results["ruliweb_male_40_save"] = dict(_EMPTY_SAVE)
+
+        # Ilbe: 40·50대 남성
+        if settings.crawl_enable_ilbe:
+            try:
+                ilbe_titles = crawl_ilbe_titles()
+                n_ilbe = len(ilbe_titles)
+                results["ilbe_male_crawled"] = n_ilbe
+                results["ilbe_male_50_crawled"] = n_ilbe
+                # save_posts_multi_age expects iterable items; passing titles list.
+                ilbe_by_age = save_posts_multi_age(
+                    db,
+                    group=AudienceGroup.male,
+                    source="ilbe",
+                    items=ilbe_titles,
+                    ages=(40, 50),
+                )
+                sp_ilbe40 = ilbe_by_age[40]
+                sp_ilbe50 = ilbe_by_age[50]
+                results["ilbe_male_40_inserted"] = sp_ilbe40.inserted
+                results["ilbe_male_40_save"] = {
+                    "skipped_transform_error": sp_ilbe40.skipped_transform_error,
+                    "skipped_transform_none": sp_ilbe40.skipped_transform_none,
+                    "skipped_duplicate": sp_ilbe40.skipped_duplicate,
+                }
+                results["ilbe_male_50_inserted"] = sp_ilbe50.inserted
+                results["ilbe_male_50_save"] = {
+                    "skipped_transform_error": sp_ilbe50.skipped_transform_error,
+                    "skipped_transform_none": sp_ilbe50.skipped_transform_none,
+                    "skipped_duplicate": sp_ilbe50.skipped_duplicate,
+                }
+            except Exception as e:
+                results["ilbe_male_40_inserted"] = 0
+                results["ilbe_male_50_inserted"] = 0
+                results["ilbe_male_crawled"] = None
+                results["ilbe_male_50_crawled"] = None
+                msg = f"ilbe_male: {e}"
+                errors.append(msg)
+                logger.warning("crawl_once %s", msg, exc_info=True)
+        else:
+            disabled_sources.append("ilbe")
+            results["ilbe_male_40_inserted"] = 0
+            results["ilbe_male_50_inserted"] = 0
+            results["ilbe_male_crawled"] = 0
+            results["ilbe_male_50_crawled"] = 0
+            results["ilbe_male_40_save"] = dict(_EMPTY_SAVE)
+            results["ilbe_male_50_save"] = dict(_EMPTY_SAVE)
 
         # 30대 남성 커뮤니티: 개드립 인기글
         if settings.crawl_enable_dogdrip:
