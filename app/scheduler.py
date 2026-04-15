@@ -260,16 +260,15 @@ def crawl_once() -> dict[str, Any]:
         # Ilbe: 40·50대 남성
         if settings.crawl_enable_ilbe:
             try:
-                ilbe_titles = crawl_ilbe_titles()
-                n_ilbe = len(ilbe_titles)
+                ilbe_items = crawl_ilbe_titles()
+                n_ilbe = len(ilbe_items)
                 results["ilbe_male_crawled"] = n_ilbe
                 results["ilbe_male_50_crawled"] = n_ilbe
-                # save_posts_multi_age expects iterable items; passing titles list.
                 ilbe_by_age = save_posts_multi_age(
                     db,
                     group=AudienceGroup.male,
                     source="ilbe",
-                    items=ilbe_titles,
+                    items=ilbe_items,
                     ages=(40, 50),
                 )
                 sp_ilbe40 = ilbe_by_age[40]

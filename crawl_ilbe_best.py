@@ -3,6 +3,8 @@ import sys
 from typing import List, Optional
 
 import requests
+
+from app.crawlers.common import CrawledItem
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
@@ -80,14 +82,14 @@ def extract_titles(soup: BeautifulSoup) -> List[str]:
     return titles
 
 
-def crawl_ilbe_titles(limit: int = 30) -> List[str]:
+def crawl_ilbe_titles(limit: int = 30) -> List[CrawledItem]:
     session = create_http_session()
     html = fetch_html(session, BASE_URL)
     soup = BeautifulSoup(html, "html.parser")
     titles = extract_titles(soup)
     if limit > 0:
         titles = titles[:limit]
-    return titles
+    return [CrawledItem(title=t, category="") for t in titles]
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -96,7 +98,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        titles = crawl_ilbe_titles(limit=args.limit)
+        items = crawl_ilbe_titles(limit=args.limit)
     except requests.HTTPError as e:
         print(f"HTTP error: {e}", file=sys.stderr)
         return 2
@@ -107,8 +109,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Unexpected error: {e}", file=sys.stderr)
         return 1
 
-    for t in titles:
-        print(t)
+    for it in items:
+        print(it.title)
 
     return 0
 
