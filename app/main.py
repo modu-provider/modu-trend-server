@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, literal, select, text
+from sqlalchemy.sql import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import SessionLocal, engine
-from app.models import AudienceGroup, Base, User
+from app.models import AudienceGroup, Base, Post, User
 from app.scheduler import crawl_once, start_scheduler
 from app.services.ingest import get_rankings, recompute_rankings
 from app.services.auth import create_access_token, decode_access_token, hash_password, verify_password
@@ -115,6 +118,13 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
 
 
+class PostHit(BaseModel):
+    title: str
+    category: str
+    source: str
+    fetched_at: datetime
+
+
 @app.on_event("startup")
 def _startup() -> None:
     global _scheduler
@@ -197,6 +207,48 @@ def rankings(
             recompute_rankings(db, group=group, age=age, window_minutes=window_minutes, limit=limit)
             rows = get_rankings(db, group=group, age=age, window_minutes=window_minutes, limit=limit)
     return {"group": group.value, "age": age, "window_minutes": window_minutes, "items": rows}
+
+
+@app.get("/posts/search", response_model=list[PostHit])
+def search_posts_by_keyword(
+    keyword: str,
+    group: AudienceGroup,
+    age: int = 20,
+    limit: int = 50,
+    minutes: float | None = None,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Search posts by a single keyword token stored in `Post.keywords` (comma-separated).
+    - Exact token match (case-insensitive) against the stored comma-separated keywords.
+    - Also constrained by audience group/age and fetched_at within the recent window.
+    """
+    if not _db_ready:
+        raise HTTPException(status_code=503, detail="DB is not ready. Start PostgreSQL and set DATABASE_URL.")
+    kw = (keyword or "").strip().lower()
+    if not kw:
+        raise HTTPException(status_code=422, detail="keyword is required")
+    if limit <= 0:
+        raise HTTPException(status_code=422, detail="limit must be > 0")
+    limit = min(limit, 200)
+
+    window_minutes = minutes if minutes is not None else settings.ranking_window_minutes
+    since = datetime.now(timezone.utc) - timedelta(minutes=float(window_minutes))
+
+    # Match exact token within comma-separated string.
+    # We wrap keywords with commas to avoid partial matches (e.g., "ai" matching "hail").
+    wrapped = func.lower(literal(",") + Post.keywords + literal(","))
+    token_match = wrapped.like(f"%,{kw},%")
+
+    q = (
+        select(Post.title, Post.category, Post.source, Post.fetched_at)
+        .where(Post.group == group, Post.age == age, Post.fetched_at >= since, token_match)
+        .order_by(Post.fetched_at.desc(), Post.id.desc())
+        .limit(limit)
+    )
+    rows = db.execute(q).all()
+    return [PostHit(title=t, category=c or "", source=s, fetched_at=fa) for (t, c, s, fa) in rows]
 
 
 @app.post("/crawl/now")
