@@ -137,6 +137,10 @@ class SentimentOut(BaseModel):
     negative_pct: float
 
 
+class NaverDatalabIn(BaseModel):
+    keyword: str = Field(min_length=1, max_length=80)
+
+
 @app.on_event("startup")
 def _startup() -> None:
     global _scheduler
@@ -291,4 +295,18 @@ def crawl_now():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return result
+
+
+@app.post("/naver/datalab/search")
+def naver_datalab_search(payload: NaverDatalabIn, user: User = Depends(require_user)):
+    if not _db_ready:
+        raise HTTPException(status_code=503, detail="DB is not ready. Start PostgreSQL and set DATABASE_URL.")
+    from app.services.naver_datalab import fetch_datalab_search
+
+    try:
+        return fetch_datalab_search(keyword=payload.keyword)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"naver datalab call failed: {e}")
 

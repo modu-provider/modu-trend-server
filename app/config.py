@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     openai_moderation_model: str = "omni-moderation-latest"
     openai_transform_enabled: bool = True
 
+    naver_client_id: str | None = None
+    naver_client_secret: str | None = None
+
     jwt_secret_key: str = "dev-secret-change-me"
     jwt_algorithm: str = "HS256"
 
