@@ -125,6 +125,18 @@ class PostHit(BaseModel):
     fetched_at: datetime
 
 
+class SentimentOut(BaseModel):
+    keyword: str
+    group: AudienceGroup
+    age: int
+    window_minutes: float
+    matched_posts: int
+    analyzed_posts: int
+    positive_pct: float
+    neutral_pct: float
+    negative_pct: float
+
+
 @app.on_event("startup")
 def _startup() -> None:
     global _scheduler
@@ -209,7 +221,7 @@ def rankings(
     return {"group": group.value, "age": age, "window_minutes": window_minutes, "items": rows}
 
 
-@app.get("/posts/search", response_model=list[PostHit])
+@app.get("/posts/search", response_model=SentimentOut)
 def search_posts_by_keyword(
     keyword: str,
     group: AudienceGroup,
@@ -220,9 +232,9 @@ def search_posts_by_keyword(
     db: Session = Depends(get_db),
 ):
     """
-    Search posts by a single keyword token stored in `Post.keywords` (comma-separated).
-    - Exact token match (case-insensitive) against the stored comma-separated keywords.
-    - Also constrained by audience group/age and fetched_at within the recent window.
+    Analyze sentiment distribution (positive/neutral/negative %) for recent posts matching `keyword`.
+    Matching is an exact token match (case-insensitive) against comma-separated `Post.keywords`,
+    constrained by audience group/age and fetched_at within the recent window.
     """
     if not _db_ready:
         raise HTTPException(status_code=503, detail="DB is not ready. Start PostgreSQL and set DATABASE_URL.")
@@ -248,7 +260,26 @@ def search_posts_by_keyword(
         .limit(limit)
     )
     rows = db.execute(q).all()
-    return [PostHit(title=t, category=c or "", source=s, fetched_at=fa) for (t, c, s, fa) in rows]
+
+    titles = [t for (t, _c, _s, _fa) in rows if t]
+    from app.services.sentiment import analyze_title_sentiment_distribution
+
+    try:
+        dist = analyze_title_sentiment_distribution(titles)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"sentiment analysis failed: {e}")
+
+    return SentimentOut(
+        keyword=kw,
+        group=group,
+        age=age,
+        window_minutes=float(window_minutes),
+        matched_posts=len(rows),
+        analyzed_posts=len(titles),
+        positive_pct=dist.positive_pct,
+        neutral_pct=dist.neutral_pct,
+        negative_pct=dist.negative_pct,
+    )
 
 
 @app.post("/crawl/now")
